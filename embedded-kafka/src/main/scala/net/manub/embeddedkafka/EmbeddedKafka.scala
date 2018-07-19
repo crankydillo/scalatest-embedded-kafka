@@ -46,15 +46,23 @@ object EmbeddedKafka extends EmbeddedKafkaSupport {
     * The log directories will be cleaned after calling the [[stop()]] method or on JVM exit, whichever happens earlier.
     *
     * @param config an implicit [[EmbeddedKafkaConfig]]
+    * @return int the 'actual' config used for Kafka.  If the supplied config uses
+    *         0 for Kafka's port, one will be assigned.  The returned config will
+    *         have this assigned port.
     */
-  def start()(implicit config: EmbeddedKafkaConfig): Unit = {
+  def start()(implicit config: EmbeddedKafkaConfig): EmbeddedKafkaConfig = {
     val zkLogsDir = Directory.makeTemp("zookeeper-logs")
     val kafkaLogsDir = Directory.makeTemp("kafka-logs")
 
     factory = Option(startZooKeeper(config.zooKeeperPort, zkLogsDir))
-    broker = Option(startKafka(config, kafkaLogsDir))
+
+    val zkPort = zookeeperPort(factory.get)
+    val configWithUsedZookeeperPort = config.copy(zooKeeperPort = zkPort)
+    broker = Option(startKafka(configWithUsedZookeeperPort, kafkaLogsDir))
 
     logsDirs ++= Seq(zkLogsDir, kafkaLogsDir)
+
+    configWithUsedZookeeperPort.copy(kafkaPort = kafkaPort(broker.get))
   }
 
   /**
@@ -112,6 +120,12 @@ object EmbeddedKafka extends EmbeddedKafkaSupport {
     * Returns whether the in memory Kafka and Zookeeper are running.
     */
   def isRunning: Boolean = factory.nonEmpty && broker.nonEmpty
+
+  private[embeddedkafka] def kafkaPort(kafkaServer: KafkaServer): Int =
+    kafkaServer.boundPort(kafkaServer.config.listeners.head.listenerName)
+
+  private[embeddedkafka] def zookeeperPort(fac: ServerCnxnFactory): Int =
+    fac.getLocalPort
 }
 
 sealed trait EmbeddedKafkaSupport {
@@ -279,10 +293,11 @@ sealed trait EmbeddedKafkaSupport {
     val message = Try {
       consumer.subscribe(List(topic))
       consumer.partitionsFor(topic) // as poll doesn't honour the timeout, forcing the consumer to fail here.
-      val records = consumer.poll(5000)
+      val timeout = 5 * 1000;
+      val records = consumer.poll(timeout)
       if (records.isEmpty) {
         throw new TimeoutException(
-          "Unable to retrieve a message from Kafka in 5000ms")
+          "Unable to retrieve a message from Kafka in " + timeout + "ms")
       }
 
       val record = records.iterator().next()
@@ -461,5 +476,4 @@ sealed trait EmbeddedKafkaSupport {
                                topicProperties)
     finally zkUtils.close()
   }
-
 }
