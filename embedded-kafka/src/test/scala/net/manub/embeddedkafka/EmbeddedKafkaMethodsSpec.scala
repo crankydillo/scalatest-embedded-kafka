@@ -3,14 +3,11 @@ package net.manub.embeddedkafka
 import java.util.concurrent.TimeoutException
 
 import kafka.server.KafkaConfig
-import kafka.zk.KafkaZkClient
 import org.apache.kafka.clients.producer.{
   KafkaProducer,
   ProducerConfig,
   ProducerRecord
 }
-import org.apache.kafka.common.config.TopicConfig
-import org.apache.kafka.common.header.internals.RecordHeaders
 import org.apache.kafka.common.serialization.{
   ByteArraySerializer,
   StringDeserializer,
@@ -67,10 +64,8 @@ class EmbeddedKafkaMethodsSpec
       val message = "hello world!"
       val topic = "publish_test_topic_with_header"
       val headerValue = "my_header_value"
-      val headers = new RecordHeaders()
-        .add("my_header", headerValue.toCharArray.map(_.toByte))
       val producerRecord =
-        new ProducerRecord[String, String](topic, null, "key", message, headers)
+        new ProducerRecord[String, String](topic, null, "key", message)
 
       publishToKafka(producerRecord)
 
@@ -83,9 +78,6 @@ class EmbeddedKafkaMethodsSpec
       val record = records.iterator().next()
 
       record.value() shouldBe message
-      val myHeader = record.headers().lastHeader("my_header")
-      val actualHeaderValue = new String(myHeader.value().map(_.toChar))
-      actualHeaderValue shouldBe headerValue
 
       consumer.close()
     }
@@ -143,58 +135,6 @@ class EmbeddedKafkaMethodsSpec
       record2.value() shouldBe message2
 
       consumer.close()
-    }
-  }
-
-  "the createCustomTopic method" should {
-    "create a topic with a custom configuration" in {
-      implicit val config = EmbeddedKafkaConfig(
-        customBrokerProperties = Map(
-          KafkaConfig.LogCleanerDedupeBufferSizeProp -> 2000000.toString
-        ))
-      val topic = "test_custom_topic"
-
-      createCustomTopic(
-        topic,
-        Map(
-          TopicConfig.CLEANUP_POLICY_CONFIG -> TopicConfig.CLEANUP_POLICY_COMPACT))
-
-      val zkClient = KafkaZkClient.apply(
-        s"localhost:${config.zooKeeperPort}",
-        isSecure = false,
-        zkSessionTimeoutMs,
-        zkConnectionTimeoutMs,
-        maxInFlightRequests = 1,
-        Time.SYSTEM
-      )
-
-      try {
-        zkClient.topicExists(topic) shouldBe true
-      } finally zkClient.close()
-    }
-
-    "create a topic with custom number of partitions" in {
-      implicit val config = EmbeddedKafkaConfig()
-      val topic = "test_custom_topic_with_custom_partitions"
-
-      createCustomTopic(
-        topic,
-        Map(
-          TopicConfig.CLEANUP_POLICY_CONFIG -> TopicConfig.CLEANUP_POLICY_COMPACT),
-        partitions = 2)
-
-      val zkClient = KafkaZkClient.apply(
-        s"localhost:${config.zooKeeperPort}",
-        isSecure = false,
-        zkSessionTimeoutMs,
-        zkConnectionTimeoutMs,
-        maxInFlightRequests = 1,
-        Time.SYSTEM
-      )
-
-      try {
-        zkClient.getTopicPartitionCount(topic).value shouldBe 2
-      } finally zkClient.close()
     }
   }
 

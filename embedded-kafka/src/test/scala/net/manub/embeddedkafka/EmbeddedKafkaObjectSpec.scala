@@ -5,8 +5,6 @@ import org.apache.kafka.common.serialization.{
   StringSerializer
 }
 import net.manub.embeddedkafka.EmbeddedKafka._
-import org.apache.kafka.common.network.ListenerName
-import org.apache.kafka.common.security.auth.SecurityProtocol
 
 import scala.collection.JavaConverters._
 import scala.reflect.io.Directory

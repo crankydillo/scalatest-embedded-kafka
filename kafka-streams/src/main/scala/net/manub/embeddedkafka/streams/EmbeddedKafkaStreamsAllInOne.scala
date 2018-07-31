@@ -2,7 +2,7 @@ package net.manub.embeddedkafka.streams
 
 import net.manub.embeddedkafka.{Consumers, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.streams.Topology
+import org.apache.kafka.streams.processor.TopologyBuilder
 
 /** Convenience trait for testing Kafka Streams with ScalaTest.
   * It exposes `EmbeddedKafkaStreams.runStreams` as well as `Consumers` api
@@ -26,7 +26,7 @@ trait EmbeddedKafkaStreamsAllInOne extends EmbeddedKafkaStreams with Consumers {
     */
   def runStreamsWithStringConsumer(
       topicsToCreate: Seq[String],
-      topology: Topology)(block: KafkaConsumer[String, String] => Any)(
+      topology: TopologyBuilder)(block: KafkaConsumer[String, String] => Any)(
       implicit config: EmbeddedKafkaConfig): Any =
     runStreams(topicsToCreate, topology)(withStringConsumer[Any](block))(config)
 }

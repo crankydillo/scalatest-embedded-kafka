@@ -2,7 +2,7 @@ import sbtrelease.Version
 
 parallelExecution in ThisBuild := false
 
-val kafkaVersion = "1.1.1"
+val kafkaVersion = "0.10.2.1"
 val confluentVersion = "4.1.1"
 val akkaVersion = "2.5.14"
 
@@ -61,7 +61,7 @@ lazy val root = (project in file("."))
   .settings(releaseSettings: _*)
   .disablePlugins(BintrayPlugin)
   .settings(publishTo := Some(Resolver.defaultLocal))
-  .aggregate(embeddedKafka, kafkaStreams, schemaRegistry)
+  .aggregate(embeddedKafka, kafkaStreams)
 
 lazy val embeddedKafka = (project in file("embedded-kafka"))
   .settings(name := "scalatest-embedded-kafka")
@@ -69,7 +69,9 @@ lazy val embeddedKafka = (project in file("embedded-kafka"))
   .settings(commonSettings: _*)
   .settings(commonLibrarySettings)
   .settings(
-    libraryDependencies += "org.mockito" % "mockito-core" % "2.19.1" % Test)
+    libraryDependencies ++= Seq(
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+      "org.mockito" % "mockito-core" % "2.19.1" % Test))
   .settings(releaseSettings: _*)
 
 lazy val kafkaStreams = (project in file("kafka-streams"))
@@ -81,20 +83,3 @@ lazy val kafkaStreams = (project in file("kafka-streams"))
   .settings(libraryDependencies +=
     "org.apache.kafka" % "kafka-streams" % kafkaVersion)
   .dependsOn(embeddedKafka)
-
-lazy val schemaRegistry = (project in file("schema-registry"))
-  .settings(name := "scalatest-embedded-schema-registry")
-  .settings(publishSettings: _*)
-  .settings(commonSettings: _*)
-  .settings(commonLibrarySettings)
-  .settings(releaseSettings: _*)
-  .settings(resolvers ++= Seq(
-    "confluent" at "https://packages.confluent.io/maven/"))
-  .settings(libraryDependencies ++= Seq(
-    "org.apache.kafka" % "kafka-streams" % kafkaVersion,
-    "io.confluent" % "kafka-avro-serializer" % confluentVersion,
-    "io.confluent" % "kafka-schema-registry" % confluentVersion,
-    "io.confluent" % "kafka-schema-registry" % confluentVersion classifier "tests",
-  ))
-  .dependsOn(embeddedKafka % "compile->compile;test->test",
-             kafkaStreams % "compile->compile;test->test")

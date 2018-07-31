@@ -1,9 +1,11 @@
 package net.manub.embeddedkafka
 
 import java.net.InetSocketAddress
+import java.util.Properties
 
+import kafka.admin.AdminUtils
 import kafka.server.{KafkaConfig, KafkaServer}
-import org.apache.kafka.clients.admin.{AdminClient, AdminClientConfig, NewTopic}
+import kafka.utils.ZkUtils
 import org.apache.kafka.clients.consumer.{
   ConsumerConfig,
   KafkaConsumer,
@@ -15,7 +17,7 @@ import org.apache.kafka.clients.producer.{
   ProducerConfig,
   ProducerRecord
 }
-import org.apache.kafka.common.security.auth.SecurityProtocol
+import org.apache.kafka.common.protocol.SecurityProtocol
 import org.apache.kafka.common.serialization.{
   Deserializer,
   Serializer,
@@ -197,6 +199,7 @@ private[embeddedkafka] trait EmbeddedKafkaSupport[C <: EmbeddedKafkaConfig] {
 
   val zkSessionTimeoutMs = 10000
   val zkConnectionTimeoutMs = 10000
+  val zkSecurityEnabled = false
 
   def baseProducerConfig(implicit config: C): Map[String, Object]
   def baseConsumerConfig(implicit config: C): Map[String, Object]
@@ -653,7 +656,7 @@ private[embeddedkafka] trait EmbeddedKafkaSupport[C <: EmbeddedKafkaConfig] {
                                        tickTime)
 
     val factory = ServerCnxnFactory.createFactory
-    factory.configure(new InetSocketAddress("localhost", zooKeeperPort), 1024)
+    factory.configure(new InetSocketAddress("0.0.0.0", zooKeeperPort), 1024)
     factory.startup(zkServer)
     factory
   }
@@ -664,20 +667,18 @@ private[embeddedkafka] trait EmbeddedKafkaSupport[C <: EmbeddedKafkaConfig] {
       customBrokerProperties: Map[String, String],
       kafkaLogDir: Directory) = {
     val zkAddress = s"localhost:$zooKeeperPort"
-    val listener = s"${SecurityProtocol.PLAINTEXT}://localhost:$kafkaPort"
 
     val brokerProperties = Map[String, Object](
       KafkaConfig.ZkConnectProp -> zkAddress,
       KafkaConfig.BrokerIdProp -> 0.toString,
-      KafkaConfig.ListenersProp -> listener,
-      KafkaConfig.AdvertisedListenersProp -> listener,
+      KafkaConfig.HostNameProp -> "localhost",
+      KafkaConfig.AdvertisedHostNameProp -> "localhost",
+      "port" -> kafkaPort.toString,
       KafkaConfig.AutoCreateTopicsEnableProp -> true.toString,
       KafkaConfig.LogDirProp -> kafkaLogDir.toAbsolute.path,
       KafkaConfig.LogFlushIntervalMessagesProp -> 1.toString,
       KafkaConfig.OffsetsTopicReplicationFactorProp -> 1.toString,
       KafkaConfig.OffsetsTopicPartitionsProp -> 1.toString,
-      KafkaConfig.TransactionsTopicReplicationFactorProp -> 1.toString,
-      KafkaConfig.TransactionsTopicMinISRProp -> 1.toString,
       // The total memory used for log deduplication across all cleaner threads, keep it small to not exhaust suite memory
       KafkaConfig.LogCleanerDedupeBufferSizeProp -> 1048577.toString
     ) ++ customBrokerProperties
@@ -709,22 +710,20 @@ private[embeddedkafka] trait EmbeddedKafkaSupport[C <: EmbeddedKafkaConfig] {
                         partitions: Int = 1,
                         replicationFactor: Int = 1)(
       implicit config: EmbeddedKafkaConfig): Unit = {
-    val adminClient = AdminClient.create(
-      Map[String, Object](
-        AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG -> s"localhost:${config.kafkaPort}",
-        AdminClientConfig.CLIENT_ID_CONFIG -> "embedded-kafka-admin-client",
-        AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG -> zkSessionTimeoutMs.toString,
-        AdminClientConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG -> zkConnectionTimeoutMs.toString
-      ).asJava)
-    val newTopic = new NewTopic(topic, partitions, replicationFactor.toShort)
-      .configs(topicConfig.asJava)
 
-    try {
-      adminClient
-        .createTopics(Seq(newTopic).asJava)
-        .all
-        .get(2, SECONDS)
-    } finally adminClient.close()
+    val zkUtils = ZkUtils(s"localhost:${config.zooKeeperPort}",
+                          zkSessionTimeoutMs,
+                          zkConnectionTimeoutMs,
+                          zkSecurityEnabled)
+    val topicProperties = topicConfig.foldLeft(new Properties) {
+      case (props, (k, v)) => props.put(k, v); props
+    }
+
+    try AdminUtils.createTopic(zkUtils,
+                               topic,
+                               partitions,
+                               replicationFactor,
+                               topicProperties)
+    finally zkUtils.close()
   }
-
 }
