@@ -27,17 +27,19 @@ lazy val commonLibrarySettings = libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
 )
 
+
 lazy val publishSettings = Seq(
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
   publishMavenStyle := true,
   publishArtifact in Test := false,
+  updateOptions := updateOptions.value.withGigahorse(false),
   pomIncludeRepository := { _ =>
     false
   },
   pomExtra :=
     <scm>
-      <url>https://github.com/manub/scalatest-embedded-kafka</url>
-      <connection>scm:git:git@github.com:manub/scalatest-embedded-kafka.git</connection>
+      <url>https://github.com/crankydillo/scalatest-embedded-kafka</url>
+      <connection>scm:git:git@github.com:crankydillo/scalatest-embedded-kafka.git</connection>
     </scm>
       <developers>
         <developer>
@@ -59,7 +61,6 @@ lazy val root = (project in file("."))
   .settings(publishArtifact := false)
   .settings(publish := {})
   .settings(releaseSettings: _*)
-  .disablePlugins(BintrayPlugin)
   .settings(publishTo := Some(Resolver.defaultLocal))
   .aggregate(embeddedKafka, kafkaStreams)
 
